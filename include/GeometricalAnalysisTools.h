@@ -59,7 +59,8 @@ namespace CCCoreLib
 												PointCoordinateType kernelRadius,
 												const CCVector3* roughnessUpDir = nullptr,
 												GenericProgressCallback* progressCb = nullptr,
-												DgmOctree* inputOctree = nullptr);
+												DgmOctree* inputOctree = nullptr,
+												const Neighbourhood::SignCurvature signCurvature = Neighbourhood::DO_NOT_SIGN);
 
 		//! Computes the local density (approximate)
 		/** Old method (based only on the distance to the nearest neighbor).

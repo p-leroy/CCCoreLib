@@ -36,7 +36,19 @@ namespace CCCoreLib
 		//! Curvature type
 		enum CurvatureType {	GAUSSIAN_CURV = 1,
 								MEAN_CURV,
-								NORMAL_CHANGE_RATE};
+								NORMAL_CHANGE_RATE,
+								TYPE_OF_QUADRIC};
+
+		//! Sign curvatures
+		enum SignCurvature {	DO_NOT_SIGN,
+								SIGN_WITH_NORMAL,
+								SIGN_WITH_PLUS_Z};
+
+		//! Type of quadric
+		enum TypeOfQuadric {	UNKNOWN,
+								ELLIPTIC_PARABOLOID_AKA_BOWL,
+								HYPERBOLIC_PARABOLOID_AKA_SADDLE,
+								PARABOLIC_AKA_DEGENERATE};
 
 		//! Default constructor
 		/** \param associatedCloud reference cloud
@@ -206,7 +218,11 @@ namespace CCCoreLib
 		/** \return curvature value at a given position P or CCCoreLib::NAN_VALUE if the computation failed
 			\warning The curvature value is always unsigned
 		**/
-		ScalarType computeCurvature(const CCVector3& P, CurvatureType cType);
+		ScalarType computeCurvature(const CCVector3& P,
+									CurvatureType cType,
+									const GenericIndexedCloudPersist* associatedCloud,
+									unsigned int globalIndex,
+									const SignCurvature &signCurvature);
 
 		/**** GETTERS ****/
 

@@ -28,7 +28,8 @@ GeometricalAnalysisTools::ErrorCode GeometricalAnalysisTools::ComputeCharactersi
 		PointCoordinateType kernelRadius,
 		const CCVector3* roughnessUpDir/*=nullptr*/,
 		GenericProgressCallback* progressCb/*=nullptr*/,
-		DgmOctree* inputOctree/*=nullptr*/)
+		DgmOctree* inputOctree/*=nullptr*/,
+		const Neighbourhood::SignCurvature signCurvature /*=DO_NOT_SIGN*/)
 {
 	if (!cloud)
 	{
@@ -106,7 +107,8 @@ GeometricalAnalysisTools::ErrorCode GeometricalAnalysisTools::ComputeCharactersi
 		static_cast<void*>(&c),
 		static_cast<void*>(&subOption),
 		static_cast<void*>(&kernelRadius),
-		static_cast<void*>(const_cast<CCVector3*>(roughnessUpDir))
+		static_cast<void*>(const_cast<CCVector3*>(roughnessUpDir)),
+		static_cast<void*>(const_cast<Neighbourhood::SignCurvature*>(&signCurvature)),
 	};
 
 	ErrorCode result = NoError;
@@ -170,10 +172,11 @@ bool GeometricalAnalysisTools::ComputeGeomCharacteristicAtLevel(const DgmOctree:
 																NormalizedProgress* nProgress/*=nullptr*/)
 {
 	//parameters
-	GeomCharacteristic c            = *static_cast<GeomCharacteristic*>(additionalParameters[0]);
-	int subOption                   = *static_cast<Neighbourhood::CurvatureType*>(additionalParameters[1]);
-	PointCoordinateType radius      = *static_cast<PointCoordinateType*>(additionalParameters[2]);
-	const CCVector3* roughnessUpDir = static_cast<const CCVector3*>(additionalParameters[3]);
+	GeomCharacteristic c                       = *static_cast<GeomCharacteristic*>(additionalParameters[0]);
+	int subOption                              = *static_cast<Neighbourhood::CurvatureType*>(additionalParameters[1]);
+	PointCoordinateType radius                 = *static_cast<PointCoordinateType*>(additionalParameters[2]);
+	const CCVector3* roughnessUpDir            = static_cast<const CCVector3*>(additionalParameters[3]);
+	Neighbourhood::SignCurvature signCurvature = *static_cast<Neighbourhood::SignCurvature*>(additionalParameters[4]);
 
 	//structure for nearest neighbors search
 	DgmOctree::NearestNeighboursSearchStruct nNSS;
@@ -231,7 +234,10 @@ bool GeometricalAnalysisTools::ComputeGeomCharacteristicAtLevel(const DgmOctree:
 				{
 					DgmOctreeReferenceCloud neighboursCloud(&nNSS.pointsInNeighbourhood, neighborCount);
 					Neighbourhood Z(&neighboursCloud);
-					value = Z.computeCurvature(nNSS.queryPoint, static_cast<Neighbourhood::CurvatureType>(subOption));
+					value = Z.computeCurvature(nNSS.queryPoint, static_cast<Neighbourhood::CurvatureType>(subOption),
+											   cell.parentOctree->associatedCloud(),
+											   cell.points->getPointGlobalIndex(i),
+											   signCurvature);
 				}
 				break;
 

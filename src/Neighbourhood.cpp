@@ -882,12 +882,17 @@ ScalarType Neighbourhood::computeRoughness(const CCVector3& P, const CCVector3* 
 	}
 }
 
-ScalarType Neighbourhood::computeCurvature(const CCVector3& P, CurvatureType cType)
+ScalarType Neighbourhood::computeCurvature(const CCVector3& P,
+										   CurvatureType cType,
+										   const GenericIndexedCloudPersist* associatedCloud,
+										   unsigned globalIndex,
+										   const SignCurvature& signCurvature)
 {
 	switch (cType)
 	{
 		case GAUSSIAN_CURV:
 		case MEAN_CURV:
+		case TYPE_OF_QUADRIC:
 		{
 			//we get 2D1/2 quadric parameters
 			const PointCoordinateType* H = getQuadric();
@@ -904,11 +909,31 @@ ScalarType Neighbourhood::computeCurvature(const CCVector3& P, CurvatureType cTy
 
 			//z = a+b.x+c.y+d.x^2+e.x.y+f.y^2
 			//const PointCoordinateType a = H[0];
+			const double a = H[0];
 			const double b = H[1];
 			const double c = H[2];
 			const double d = H[3];
 			const double e = H[4];
 			const double f = H[5];
+
+			if (cType == TYPE_OF_QUADRIC) // If we just want the type of quadric, we have what we need
+			{
+				TypeOfQuadric typeOfQuadric = UNKNOWN;
+				const double delta = b * b - 4 * a * c;
+				if (delta < 0)
+				{
+					typeOfQuadric = ELLIPTIC_PARABOLOID_AKA_BOWL;
+				}
+				else if (delta > 0)
+				{
+					typeOfQuadric = HYPERBOLIC_PARABOLOID_AKA_SADDLE;
+				}
+				else if (delta == 0)
+				{
+					typeOfQuadric = PARABOLIC_AKA_DEGENERATE;
+				}
+				return typeOfQuadric;
+			}
 
 			//See "CURVATURE OF CURVES AND SURFACES – A PARABOLIC APPROACH" by ZVI HAR’EL
 			const double fx	= b + (d*2) * Q.x + (e  ) * Q.y;	// b+2d*X+eY
@@ -921,25 +946,47 @@ ScalarType Neighbourhood::computeCurvature(const CCVector3& P, CurvatureType cTy
 			const double fy2 = fy*fy;
 			const double q = (1 + fx2 + fy2);
 
+			if (signCurvature == SIGN_WITH_NORMAL || signCurvature == SIGN_WITH_PLUS_Z) // Compute the normal to the 2D1/2 quadric at the input neighbour position
+			{
+				CCVector3d n(-fx, -fy, 1);
+				n.normalize();
+			}
+
 			switch (cType)
 			{
-				case GAUSSIAN_CURV:
+			case GAUSSIAN_CURV:
+			{
+				switch (signCurvature)
 				{
-					//to sign the curvature, we need a normal!
+				case SIGN_WITH_NORMAL:
+					break;
+				case SIGN_WITH_PLUS_Z:
+					break;
+				case DO_NOT_SIGN:
 					const double K = std::abs(fxx*fyy - fxy * fxy) / (q*q);
 					return static_cast<ScalarType>(K);
+					break;
 				}
+			}
 
-				case MEAN_CURV:
+			case MEAN_CURV:
+			{
+				switch (signCurvature)
 				{
-					//to sign the curvature, we need a normal!
+				case SIGN_WITH_NORMAL:
+					break;
+				case SIGN_WITH_PLUS_Z:
+					break;
+				case DO_NOT_SIGN:
 					const double H2 = std::abs(((1 + fx2)*fyy - 2 * fx*fy*fxy + (1 + fy2)*fxx)) / (2 * sqrt(q)*q);
 					return static_cast<ScalarType>(H2);
-				}
-
-				default:
-					assert(false);
 					break;
+				}
+			}
+
+			default:
+				assert(false);
+				break;
 			}
 		}
 		break;
