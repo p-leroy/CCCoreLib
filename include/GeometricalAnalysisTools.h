@@ -39,7 +39,8 @@ namespace CCCoreLib
 							ProcessFailed = -4,
 							UnhandledCharacteristic = -5,
 							NotEnoughMemory = -6,
-							ProcessCancelledByUser = -7
+							ProcessCancelledByUser = -7,
+							NormalsNeededOnTheInputCloud = -8,
 					   };
 		//! Unified way to compute a geometric characteristic
 		/** Once the main geometric characterstic is chosen, the subOption parameter is used to specify

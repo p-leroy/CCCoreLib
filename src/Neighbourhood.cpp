@@ -884,9 +884,9 @@ ScalarType Neighbourhood::computeRoughness(const CCVector3& P, const CCVector3* 
 
 ScalarType Neighbourhood::computeCurvature(const CCVector3& P,
 										   CurvatureType cType,
-										   const GenericIndexedCloudPersist* associatedCloud,
 										   unsigned globalIndex,
-										   const SignCurvature& signCurvature)
+										   const SignCurvature& signCurvature,
+										   GenericIndexedCloudPersist* associatedCloud)
 {
 	switch (cType)
 	{
@@ -900,12 +900,6 @@ ScalarType Neighbourhood::computeCurvature(const CCVector3& P,
 			{
 				return NAN_VALUE;
 			}
-
-			//compute gravity center
-			const CCVector3* G = getGravityCenter();
-			
-			//we compute curvature at the input neighbour position
-			const CCVector3 Q = m_quadricEquationOrientation * (P - *G);
 
 			//z = a+b.x+c.y+d.x^2+e.x.y+f.y^2
 			//const PointCoordinateType a = H[0];
@@ -935,6 +929,12 @@ ScalarType Neighbourhood::computeCurvature(const CCVector3& P,
 				return typeOfQuadric;
 			}
 
+			//compute gravity center
+			const CCVector3* G = getGravityCenter();
+
+			//we compute curvature at the input neighbour position
+			const CCVector3 Q = m_quadricEquationOrientation * (P - *G);
+
 			//See "CURVATURE OF CURVES AND SURFACES – A PARABOLIC APPROACH" by ZVI HAR’EL
 			const double fx	= b + (d*2) * Q.x + (e  ) * Q.y;	// b+2d*X+eY
 			const double fy	= c + (e  ) * Q.x + (f*2) * Q.y;	// c+2f*Y+eX
@@ -946,41 +946,44 @@ ScalarType Neighbourhood::computeCurvature(const CCVector3& P,
 			const double fy2 = fy*fy;
 			const double q = (1 + fx2 + fy2);
 
-			if (signCurvature == SIGN_WITH_NORMAL || signCurvature == SIGN_WITH_PLUS_Z) // Compute the normal to the 2D1/2 quadric at the input neighbour position
+			bool minus = false;
+
+			if (signCurvature == SIGN_WITH_NORMAL) // Compute the normal to the 2D1/2 quadric at the input neighbour position
 			{
-				CCVector3d n(-fx, -fy, 1);
-				n.normalize();
+				const CCVector3d n(-fx, -fy, 1);
+				minus = n.dot(*associatedCloud->getNormal(globalIndex)) < 0;
+			}
+			else if (signCurvature == SIGN_WITH_PLUS_Z)
+			{
+				const CCVector3d n(-fx, -fy, 1);
+				minus = n.dot(CCVector3d(0, 0, 1)) < 0;
 			}
 
 			switch (cType)
 			{
 			case GAUSSIAN_CURV:
 			{
-				switch (signCurvature)
+				double K = std::abs(fxx*fyy - fxy * fxy) / (q*q);
+				if (minus)
 				{
-				case SIGN_WITH_NORMAL:
-					break;
-				case SIGN_WITH_PLUS_Z:
-					break;
-				case DO_NOT_SIGN:
-					const double K = std::abs(fxx*fyy - fxy * fxy) / (q*q);
+					return static_cast<ScalarType>(-K);
+				}
+				else
+				{
 					return static_cast<ScalarType>(K);
-					break;
 				}
 			}
 
 			case MEAN_CURV:
 			{
-				switch (signCurvature)
+				const double H2 = std::abs(((1 + fx2)*fyy - 2 * fx*fy*fxy + (1 + fy2)*fxx)) / (2 * sqrt(q)*q);
+				if (minus)
 				{
-				case SIGN_WITH_NORMAL:
-					break;
-				case SIGN_WITH_PLUS_Z:
-					break;
-				case DO_NOT_SIGN:
-					const double H2 = std::abs(((1 + fx2)*fyy - 2 * fx*fy*fxy + (1 + fy2)*fxx)) / (2 * sqrt(q)*q);
+					return static_cast<ScalarType>(-H2);
+				}
+				else
+				{
 					return static_cast<ScalarType>(H2);
-					break;
 				}
 			}
 

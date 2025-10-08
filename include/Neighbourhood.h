@@ -220,9 +220,9 @@ namespace CCCoreLib
 		**/
 		ScalarType computeCurvature(const CCVector3& P,
 									CurvatureType cType,
-									const GenericIndexedCloudPersist* associatedCloud,
 									unsigned int globalIndex,
-									const SignCurvature &signCurvature);
+									const SignCurvature &signCurvature,
+									GenericIndexedCloudPersist* associatedCloud);
 
 		/**** GETTERS ****/
 
