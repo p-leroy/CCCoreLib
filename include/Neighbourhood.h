@@ -23,10 +23,10 @@ namespace CCCoreLib
 	{
 	public:
 		static constexpr int IGNORE_MAX_EDGE_LENGTH = 0;
-		
+
 		static constexpr bool DUPLICATE_VERTICES = true;
 		static constexpr bool DO_NOT_DUPLICATE_VERTICES = false;
-		
+
 		//! Geometric properties/elements that can be computed from the set of points (see Neighbourhood::getGeometricalElement)
 		enum GeomElement {		FLAG_DEPRECATED			= 0,
 								FLAG_GRAVITY_CENTER		= 1,
@@ -220,9 +220,9 @@ namespace CCCoreLib
 		**/
 		ScalarType computeCurvature(const CCVector3& P,
 									CurvatureType cType,
-									unsigned int globalIndex,
-									const SignCurvature &signCurvature,
-									GenericIndexedCloudPersist* associatedCloud);
+									unsigned int globalIndex=0,
+									const SignCurvature &signCurvature=Neighbourhood::DO_NOT_SIGN,
+									GenericIndexedCloudPersist* associatedCloud=nullptr);
 
 		/**** GETTERS ****/
 
