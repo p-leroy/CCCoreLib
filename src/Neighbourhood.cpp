@@ -936,8 +936,19 @@ ScalarType Neighbourhood::computeCurvature(const CCVector3& P,
 			const CCVector3 Q = m_quadricEquationOrientation * (P - *G);
 
 			//See "CURVATURE OF CURVES AND SURFACES – A PARABOLIC APPROACH" by ZVI HAR’EL
-			const double fx	= b + (d*2) * Q.x + (e  ) * Q.y;	// b+2d*X+eY
-			const double fy	= c + (e  ) * Q.x + (f*2) * Q.y;	// c+2f*Y+eX
+			// const double fx	= b + (d*2) * Q.x + (e  ) * Q.y;	// b+2d*X+eY
+			// const double fy	= c + (e  ) * Q.x + (f*2) * Q.y;	// c+2f*Y+eX
+			// const double fxx	= d*2;							// 2d
+			// const double fyy	= f*2;							// 2f
+			// const double fxy	= e;							// e
+
+			// const double fx2 = fx*fx;
+			// const double fy2 = fy*fy;
+			// const double q = (1 + fx2 + fy2);
+
+			//See "CURVATURE OF CURVES AND SURFACES – A PARABOLIC APPROACH" by ZVI HAR’EL
+			const double fx	= b + (d*2);	// b+2d*X+eY
+			const double fy	= c + (e  );	// c+2f*Y+eX
 			const double fxx	= d*2;							// 2d
 			const double fyy	= f*2;							// 2f
 			const double fxy	= e;							// e
@@ -963,26 +974,42 @@ ScalarType Neighbourhood::computeCurvature(const CCVector3& P,
 			{
 			case GAUSSIAN_CURV:
 			{
-				double K = std::abs(fxx*fyy - fxy * fxy) / (q*q);
-				if (minus)
+				if (signCurvature == SIGN_WITH_NORMAL || signCurvature == SIGN_WITH_PLUS_Z)
 				{
-					return static_cast<ScalarType>(-K);
+					const double K = (fxx * fyy - fxy * fxy) / (q * q);
+					if (minus)
+					{
+						return static_cast<ScalarType>(-K);
+					}
+					else
+					{
+						return static_cast<ScalarType>(K);
+					}
 				}
 				else
 				{
+					const double K = std::abs(fxx*fyy - fxy * fxy) / (q * q);
 					return static_cast<ScalarType>(K);
 				}
 			}
 
 			case MEAN_CURV:
 			{
-				const double H2 = std::abs(((1 + fx2)*fyy - 2 * fx*fy*fxy + (1 + fy2)*fxx)) / (2 * sqrt(q)*q);
-				if (minus)
+				if (signCurvature == SIGN_WITH_NORMAL || signCurvature == SIGN_WITH_PLUS_Z)
 				{
-					return static_cast<ScalarType>(-H2);
+					const double H2 = ((1 + fx2) * fyy - 2 * fx * fy * fxy + (1 + fy2) * fxx) / (2 * sqrt(q) * q);
+					if (minus)
+					{
+						return static_cast<ScalarType>(-H2);
+					}
+					else
+					{
+						return static_cast<ScalarType>(H2);
+					}
 				}
 				else
 				{
+					const double H2 = std::abs(((1 + fx2) * fyy - 2 * fx * fy * fxy + (1 + fy2) * fxx)) / (2 * sqrt(q) * q);
 					return static_cast<ScalarType>(H2);
 				}
 			}
