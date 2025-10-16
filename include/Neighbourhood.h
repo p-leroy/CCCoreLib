@@ -46,9 +46,12 @@ namespace CCCoreLib
 
 		//! Type of quadric
 		enum TypeOfQuadric {	UNKNOWN,
-								ELLIPTIC_PARABOLOID_AKA_BOWL,
-								HYPERBOLIC_PARABOLOID_AKA_SADDLE,
-								PARABOLIC_AKA_DEGENERATE};
+								PLANE,
+								PARABOLIC_CYLINDER,
+								ELLIPTIC_PARABOLOID_CONVEX,
+								ELLIPTIC_PARABOLOID_CONCAVE,
+								HYPERBOLIC_PARABOLOID,
+								DEGENERATE};
 
 		//! Default constructor
 		/** \param associatedCloud reference cloud

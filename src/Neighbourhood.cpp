@@ -379,7 +379,7 @@ bool Neighbourhood::computeQuadric()
 			*_A++ = 1.0;
 			*_A++ = l.x;
 			*_A++ = l.y;
-			*_A = static_cast<double>(l.x)*l.y;
+			*_A = static_cast<double>(l.x)*l.x;
 			//by the way, we track the max 'X' squared dimension
 			lmax2 = std::max(lmax2, *_A);
 
@@ -903,7 +903,6 @@ ScalarType Neighbourhood::computeCurvature(const CCVector3& P,
 
 			//z = a+b.x+c.y+d.x^2+e.x.y+f.y^2
 			//const PointCoordinateType a = H[0];
-			const double a = H[0];
 			const double b = H[1];
 			const double c = H[2];
 			const double d = H[3];
@@ -912,21 +911,64 @@ ScalarType Neighbourhood::computeCurvature(const CCVector3& P,
 
 			if (cType == TYPE_OF_QUADRIC) // If we just want the type of quadric, we have what we need
 			{
-				TypeOfQuadric typeOfQuadric = UNKNOWN;
-				const double delta = b * b - 4 * a * c;
-				if (delta < 0)
+				// Check if quadratic terms are significant
+				// Compare magnitude of quadratic terms to linear terms
+				double linear_magnitude = pow(pow(b, 2) + pow(c, 2), 0.5);
+				double quadratic_magnitude = pow(pow(d, 2) + pow(e, 2) + pow(f, 2), 0.5);
+				const bool isNearlyPlanar = quadratic_magnitude < linear_magnitude;
+				// Form the Hessian matrix (second derivatives)
+				// For z = d*x² + e*x*y + f*y², the Hessian is:
+				// H = [[2d,  e ],
+				//      [ e, 2f]]
+				SquareMatrixd eigVectors;
+				std::vector<double> eigValues;
+				SquareMatrixd D(2);
+				D.m_values[0][0] = 2 * d;
+				D.m_values[0][1] = e;
+				D.m_values[1][0] = 2 * f;
+				D.m_values[1][1] = e;
+				double tolerance = 1e-8;
+				if (isNearlyPlanar)
 				{
-					typeOfQuadric = ELLIPTIC_PARABOLOID_AKA_BOWL;
+					return PLANE;
 				}
-				else if (delta > 0)
+				if (!Jacobi<double>::ComputeEigenValuesAndVectors(D, eigVectors, eigValues, false))
 				{
-					typeOfQuadric = HYPERBOLIC_PARABOLOID_AKA_SADDLE;
+					return UNKNOWN;
 				}
-				else if (delta == 0)
+				else
 				{
-					typeOfQuadric = PARABOLIC_AKA_DEGENERATE;
+				    double lambda1 = eigValues[0];
+				    double lambda2 = eigValues[1];
+					// Classification based on eigenvalues
+					if (abs(lambda1) < tolerance && abs(lambda2) < tolerance)
+					{
+						return PLANE;
+					}
+					else if (abs(lambda1) < tolerance || abs(lambda2) < tolerance)
+					{
+						return PARABOLIC_CYLINDER;
+					}
+					else if (lambda1 > tolerance && lambda2 > tolerance)
+					{
+						// Both positive -> elliptic paraboloid (bowl shape)
+						return ELLIPTIC_PARABOLOID_CONVEX;
+					}
+					else if (lambda1 < -tolerance && lambda2 < -tolerance)
+					{
+						// Both negative -> elliptic paraboloid (dome shape)
+						return ELLIPTIC_PARABOLOID_CONCAVE;
+					}
+					else if ((lambda1 > tolerance && lambda2 < -tolerance) || (lambda1 < -tolerance && lambda2 > tolerance))
+					{
+						// Opposite signs -> hyperbolic paraboloid (saddle)
+						return HYPERBOLIC_PARABOLOID;
+					}
+					else
+					{
+						return DEGENERATE;
+					}
 				}
-				return typeOfQuadric;
 			}
 
 			//compute gravity center
@@ -936,19 +978,8 @@ ScalarType Neighbourhood::computeCurvature(const CCVector3& P,
 			const CCVector3 Q = m_quadricEquationOrientation * (P - *G);
 
 			//See "CURVATURE OF CURVES AND SURFACES – A PARABOLIC APPROACH" by ZVI HAR’EL
-			// const double fx	= b + (d*2) * Q.x + (e  ) * Q.y;	// b+2d*X+eY
-			// const double fy	= c + (e  ) * Q.x + (f*2) * Q.y;	// c+2f*Y+eX
-			// const double fxx	= d*2;							// 2d
-			// const double fyy	= f*2;							// 2f
-			// const double fxy	= e;							// e
-
-			// const double fx2 = fx*fx;
-			// const double fy2 = fy*fy;
-			// const double q = (1 + fx2 + fy2);
-
-			//See "CURVATURE OF CURVES AND SURFACES – A PARABOLIC APPROACH" by ZVI HAR’EL
-			const double fx	= b + (d*2);	// b+2d*X+eY
-			const double fy	= c + (e  );	// c+2f*Y+eX
+			const double fx	= b + (d*2) * Q.x + (e  ) * Q.y;	// b+2d*X+eY
+			const double fy	= c + (e  ) * Q.x + (f*2) * Q.y;	// c+2f*Y+eX
 			const double fxx	= d*2;							// 2d
 			const double fyy	= f*2;							// 2f
 			const double fxy	= e;							// e
@@ -956,6 +987,17 @@ ScalarType Neighbourhood::computeCurvature(const CCVector3& P,
 			const double fx2 = fx*fx;
 			const double fy2 = fy*fy;
 			const double q = (1 + fx2 + fy2);
+
+			//See "CURVATURE OF CURVES AND SURFACES – A PARABOLIC APPROACH" by ZVI HAR’EL
+			// const double fx		= b;	// b + 2d * X + e * Y
+			// const double fy		= c;	// c + 2f * Y + e * X
+			// const double fxx	= d * 2;// 2d
+			// const double fyy	= f * 2;// 2f
+			// const double fxy	= e;	// e
+
+			// const double fx2 = fx*fx;
+			// const double fy2 = fy*fy;
+			// const double q = (1 + fx2 + fy2);
 
 			bool minus = false;
 
@@ -988,7 +1030,7 @@ ScalarType Neighbourhood::computeCurvature(const CCVector3& P,
 				}
 				else
 				{
-					const double K = std::abs(fxx*fyy - fxy * fxy) / (q * q);
+					const double K = std::abs(fxx * fyy - fxy * fxy) / (q * q);
 					return static_cast<ScalarType>(K);
 				}
 			}
