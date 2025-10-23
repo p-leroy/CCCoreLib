@@ -86,11 +86,12 @@ const CCVector3* Neighbourhood::getLSPlaneNormal()
 	return ((m_structuresValidity & FLAG_LS_PLANE) ? m_lsPlaneVectors + 2 : nullptr);
 }
 
-const PointCoordinateType* Neighbourhood::getQuadric(SquareMatrix* toLocalOrientation/*=nullptr*/)
+const PointCoordinateType* Neighbourhood::getQuadric(SquareMatrix* toLocalOrientation/*=nullptr*/,
+													 const CCVector3* normal/*=nullptr*/)
 {
 	if (!(m_structuresValidity & FLAG_QUADRIC))
 	{
-		computeQuadric();
+		computeQuadric(normal);
 	}
 
 	if (toLocalOrientation)
@@ -294,7 +295,7 @@ bool Neighbourhood::computeLeastSquareBestFittingPlane()
 	return true;
 }
 
-bool Neighbourhood::computeQuadric()
+bool Neighbourhood::computeQuadric(const CCVector3* normal)
 {
 	//invalidate previous quadric (if any)
 	m_structuresValidity &= (~FLAG_QUADRIC);
@@ -327,6 +328,13 @@ bool Neighbourhood::computeQuadric()
 	SquareMatrix toLocalOrientation(3);
 	{
 		CCVector3 Z(lsPlane);
+		if (normal != nullptr) // Force the orientation of the z axis of the plane
+		{
+			if (Z.dot(*normal) < 0)
+			{
+				Z = -Z;
+			}
+		}
 		Z.normalize();
 		//CCVector3 Y = Z.orthogonal(); // DGM: the curvature estimate higlhy depends on the orientation of X or Y.
 										// Therefore, using a 'stable' orientation gives better results.
@@ -890,223 +898,215 @@ ScalarType Neighbourhood::computeCurvature(const CCVector3& P,
 {
 	switch (cType)
 	{
-		case GAUSSIAN_CURV:
-		case MEAN_CURV:
-		case TYPE_OF_QUADRIC:
+	case GAUSSIAN_CURV:
+	case MEAN_CURV:
+	case TYPE_OF_QUADRIC:
+	{
+		const PointCoordinateType* H;
+		//we get 2D1/2 quadric parameters
+		if (signCurvature == SIGN_WITH_NORMAL)
 		{
-			//we get 2D1/2 quadric parameters
-			const PointCoordinateType* H = getQuadric();
-			if (!H)
+			if (!associatedCloud->normalsAvailable())
 			{
 				return NAN_VALUE;
 			}
-
-			//z = a+b.x+c.y+d.x^2+e.x.y+f.y^2
-			//const PointCoordinateType a = H[0];
-			const double b = H[1];
-			const double c = H[2];
-			const double d = H[3];
-			const double e = H[4];
-			const double f = H[5];
-
-			if (cType == TYPE_OF_QUADRIC) // If we just want the type of quadric, we have what we need
+			else
 			{
-				// Check if quadratic terms are significant
-				// Compare magnitude of quadratic terms to linear terms
-				double linear_magnitude = pow(pow(b, 2) + pow(c, 2), 0.5);
-				double quadratic_magnitude = pow(pow(d, 2) + pow(e, 2) + pow(f, 2), 0.5);
-				const bool isNearlyPlanar = quadratic_magnitude < linear_magnitude;
-				// Form the Hessian matrix (second derivatives)
-				// For z = d*x² + e*x*y + f*y², the Hessian is:
-				// H = [[2d,  e ],
-				//      [ e, 2f]]
-				SquareMatrixd eigVectors;
-				std::vector<double> eigValues;
-				SquareMatrixd D(2);
-				D.m_values[0][0] = 2 * d;
-				D.m_values[0][1] = e;
-				D.m_values[1][0] = 2 * f;
-				D.m_values[1][1] = e;
-				double tolerance = 1e-8;
-				if (isNearlyPlanar)
+				H = getQuadric(nullptr, associatedCloud->getNormal(globalIndex));
+			}
+		}
+		else if (signCurvature == SIGN_WITH_PLUS_Z)
+		{
+			H = getQuadric(nullptr, new CCVector3(0, 0, 1));
+		}
+		else
+		{
+			H = getQuadric();
+		}
+
+		if (!H)
+		{
+			return NAN_VALUE;
+		}
+
+		//z = a+b.x+c.y+d.x^2+e.x.y+f.y^2
+		const double b = H[1];
+		const double c = H[2];
+		const double d = H[3];
+		const double e = H[4];
+		const double f = H[5];
+
+		if (cType == TYPE_OF_QUADRIC) // If we just want the type of quadric, we have what we need
+		{
+			// Check if quadratic terms are significant
+			// Compare magnitude of quadratic terms to linear terms
+			double linear_magnitude = pow(pow(b, 2) + pow(c, 2), 0.5);
+			double quadratic_magnitude = pow(pow(d, 2) + pow(e, 2) + pow(f, 2), 0.5);
+			const bool isNearlyPlanar = quadratic_magnitude < linear_magnitude;
+			// Form the Hessian matrix (second derivatives)
+			// For z = d*x² + e*x*y + f*y², the Hessian is:
+			// H = [[2d,  e ],
+			//      [ e, 2f]]
+			SquareMatrixd eigVectors;
+			std::vector<double> eigValues;
+			SquareMatrixd D(2);
+			D.m_values[0][0] = 2 * d;
+			D.m_values[0][1] = e;
+			D.m_values[1][0] = 2 * f;
+			D.m_values[1][1] = e;
+			double tolerance = 1e-8;
+			if (isNearlyPlanar)
+			{
+				return PLANE;
+			}
+			if (!Jacobi<double>::ComputeEigenValuesAndVectors(D, eigVectors, eigValues, false))
+			{
+				return UNKNOWN;
+			}
+			else
+			{
+				double lambda1 = eigValues[0];
+				double lambda2 = eigValues[1];
+				// Classification based on eigenvalues
+				if (abs(lambda1) < tolerance && abs(lambda2) < tolerance)
 				{
 					return PLANE;
 				}
-				if (!Jacobi<double>::ComputeEigenValuesAndVectors(D, eigVectors, eigValues, false))
+				else if (abs(lambda1) < tolerance || abs(lambda2) < tolerance)
 				{
-					return UNKNOWN;
+					return PARABOLIC_CYLINDER;
+				}
+				else if (lambda1 > tolerance && lambda2 > tolerance)
+				{
+					// Both positive -> elliptic paraboloid (bowl shape)
+					return ELLIPTIC_PARABOLOID_CONVEX;
+				}
+				else if (lambda1 < -tolerance && lambda2 < -tolerance)
+				{
+					// Both negative -> elliptic paraboloid (dome shape)
+					return ELLIPTIC_PARABOLOID_CONCAVE;
+				}
+				else if ((lambda1 > tolerance && lambda2 < -tolerance) || (lambda1 < -tolerance && lambda2 > tolerance))
+				{
+					// Opposite signs -> hyperbolic paraboloid (saddle)
+					return HYPERBOLIC_PARABOLOID;
 				}
 				else
 				{
-				    double lambda1 = eigValues[0];
-				    double lambda2 = eigValues[1];
-					// Classification based on eigenvalues
-					if (abs(lambda1) < tolerance && abs(lambda2) < tolerance)
-					{
-						return PLANE;
-					}
-					else if (abs(lambda1) < tolerance || abs(lambda2) < tolerance)
-					{
-						return PARABOLIC_CYLINDER;
-					}
-					else if (lambda1 > tolerance && lambda2 > tolerance)
-					{
-						// Both positive -> elliptic paraboloid (bowl shape)
-						return ELLIPTIC_PARABOLOID_CONVEX;
-					}
-					else if (lambda1 < -tolerance && lambda2 < -tolerance)
-					{
-						// Both negative -> elliptic paraboloid (dome shape)
-						return ELLIPTIC_PARABOLOID_CONCAVE;
-					}
-					else if ((lambda1 > tolerance && lambda2 < -tolerance) || (lambda1 < -tolerance && lambda2 > tolerance))
-					{
-						// Opposite signs -> hyperbolic paraboloid (saddle)
-						return HYPERBOLIC_PARABOLOID;
-					}
-					else
-					{
-						return DEGENERATE;
-					}
+					return DEGENERATE;
 				}
-			}
-
-			//compute gravity center
-			const CCVector3* G = getGravityCenter();
-
-			//we compute curvature at the input neighbour position
-			const CCVector3 Q = m_quadricEquationOrientation * (P - *G);
-
-			//See "CURVATURE OF CURVES AND SURFACES – A PARABOLIC APPROACH" by ZVI HAR’EL
-			const double fx	= b + (d*2) * Q.x + (e  ) * Q.y;	// b+2d*X+eY
-			const double fy	= c + (e  ) * Q.x + (f*2) * Q.y;	// c+2f*Y+eX
-			const double fxx	= d*2;							// 2d
-			const double fyy	= f*2;							// 2f
-			const double fxy	= e;							// e
-
-			const double fx2 = fx*fx;
-			const double fy2 = fy*fy;
-			const double q = (1 + fx2 + fy2);
-
-			//See "CURVATURE OF CURVES AND SURFACES – A PARABOLIC APPROACH" by ZVI HAR’EL
-			// const double fx		= b;	// b + 2d * X + e * Y
-			// const double fy		= c;	// c + 2f * Y + e * X
-			// const double fxx	= d * 2;// 2d
-			// const double fyy	= f * 2;// 2f
-			// const double fxy	= e;	// e
-
-			// const double fx2 = fx*fx;
-			// const double fy2 = fy*fy;
-			// const double q = (1 + fx2 + fy2);
-
-			bool minus = false;
-
-			if (signCurvature == SIGN_WITH_NORMAL) // Compute the normal to the 2D1/2 quadric at the input neighbour position
-			{
-				const CCVector3d n(-fx, -fy, 1);
-				minus = n.dot(*associatedCloud->getNormal(globalIndex)) < 0;
-			}
-			else if (signCurvature == SIGN_WITH_PLUS_Z)
-			{
-				const CCVector3d n(-fx, -fy, 1);
-				minus = n.dot(CCVector3d(0, 0, 1)) < 0;
-			}
-
-			switch (cType)
-			{
-			case GAUSSIAN_CURV:
-			{
-				if (signCurvature == SIGN_WITH_NORMAL || signCurvature == SIGN_WITH_PLUS_Z)
-				{
-					const double K = (fxx * fyy - fxy * fxy) / (q * q);
-					if (minus)
-					{
-						return static_cast<ScalarType>(-K);
-					}
-					else
-					{
-						return static_cast<ScalarType>(K);
-					}
-				}
-				else
-				{
-					const double K = std::abs(fxx * fyy - fxy * fxy) / (q * q);
-					return static_cast<ScalarType>(K);
-				}
-			}
-
-			case MEAN_CURV:
-			{
-				if (signCurvature == SIGN_WITH_NORMAL || signCurvature == SIGN_WITH_PLUS_Z)
-				{
-					const double H2 = ((1 + fx2) * fyy - 2 * fx * fy * fxy + (1 + fy2) * fxx) / (2 * sqrt(q) * q);
-					if (minus)
-					{
-						return static_cast<ScalarType>(-H2);
-					}
-					else
-					{
-						return static_cast<ScalarType>(H2);
-					}
-				}
-				else
-				{
-					const double H2 = std::abs(((1 + fx2) * fyy - 2 * fx * fy * fxy + (1 + fy2) * fxx)) / (2 * sqrt(q) * q);
-					return static_cast<ScalarType>(H2);
-				}
-			}
-
-			default:
-				assert(false);
-				break;
 			}
 		}
-		break;
 
-		case NORMAL_CHANGE_RATE:
+		//compute gravity center
+		const CCVector3* G = getGravityCenter();
+
+		//we compute curvature at the input neighbour position
+		const CCVector3 Q = m_quadricEquationOrientation * (P - *G);
+
+		//See "CURVATURE OF CURVES AND SURFACES – A PARABOLIC APPROACH" by ZVI HAR’EL
+		const double fx	= b + (d*2) * Q.x + (e  ) * Q.y;	// b+2d*X+eY
+		const double fy	= c + (e  ) * Q.x + (f*2) * Q.y;	// c+2f*Y+eX
+		const double fxx	= d*2;							// 2d
+		const double fyy	= f*2;							// 2f
+		const double fxy	= e;							// e
+
+		const double fx2 = fx*fx;
+		const double fy2 = fy*fy;
+		const double q = (1 + fx2 + fy2);
+
+		//See "CURVATURE OF CURVES AND SURFACES – A PARABOLIC APPROACH" by ZVI HAR’EL
+		// const double fx		= b;	// b + 2d * X + e * Y
+		// const double fy		= c;	// c + 2f * Y + e * X
+		// const double fxx	= d * 2;// 2d
+		// const double fyy	= f * 2;// 2f
+		// const double fxy	= e;	// e
+
+		// const double fx2 = fx*fx;
+		// const double fy2 = fy*fy;
+		// const double q = (1 + fx2 + fy2);
+
+		switch (cType)
 		{
-			assert(m_associatedCloud);
-			unsigned pointCount = (m_associatedCloud ? m_associatedCloud->size() : 0);
-
-			//we need at least 4 points
-			if (pointCount < 4)
+		case GAUSSIAN_CURV:
+		{
+			if (signCurvature == SIGN_WITH_NORMAL || signCurvature == SIGN_WITH_PLUS_Z)
 			{
-				//not enough points!
-				return pointCount == 3 ? 0 : NAN_VALUE;
+				const double K = (fxx * fyy - fxy * fxy) / (q * q);
+				return static_cast<ScalarType>(K);
 			}
-
-			//we determine plane normal by computing the smallest eigen value of M = 1/n * S[(p-µ)*(p-µ)']
-			SquareMatrixd covMat = computeCovarianceMatrix();
-			CCVector3d e(0, 0, 0);
-
-			SquareMatrixd eigVectors;
-			std::vector<double> eigValues;
-			if (!Jacobi<double>::ComputeEigenValuesAndVectors(covMat, eigVectors, eigValues, true))
+			else
 			{
-				//failure
-				return NAN_VALUE;
+				const double K = std::abs(fxx * fyy - fxy * fxy) / (q * q);
+				return static_cast<ScalarType>(K);
 			}
-
-			//compute curvature as the rate of change of the surface
-			e.x = eigValues[0];
-			e.y = eigValues[1];
-			e.z = eigValues[2];
-
-			const double sum = e.x + e.y + e.z; //we work with absolute values
-			if (LessThanEpsilon(sum))
-			{
-				return NAN_VALUE;
-			}
-
-			const double eMin = std::min(std::min(e.x, e.y), e.z);
-			return static_cast<ScalarType>(eMin / sum);
 		}
-		break;
+
+		case MEAN_CURV:
+		{
+			if (signCurvature == SIGN_WITH_NORMAL || signCurvature == SIGN_WITH_PLUS_Z)
+			{
+				const double H2 = ((1 + fx2) * fyy - 2 * fx * fy * fxy + (1 + fy2) * fxx) / (2 * sqrt(q) * q);
+				return static_cast<ScalarType>(H2);
+			}
+			else
+			{
+				const double H2 = std::abs(((1 + fx2) * fyy - 2 * fx * fy * fxy + (1 + fy2) * fxx)) / (2 * sqrt(q) * q);
+				return static_cast<ScalarType>(H2);
+			}
+		}
 
 		default:
-		{
 			assert(false);
+			break;
 		}
+	}
+		break;
+
+	case NORMAL_CHANGE_RATE:
+	{
+		assert(m_associatedCloud);
+		unsigned pointCount = (m_associatedCloud ? m_associatedCloud->size() : 0);
+
+		//we need at least 4 points
+		if (pointCount < 4)
+		{
+			//not enough points!
+			return pointCount == 3 ? 0 : NAN_VALUE;
+		}
+
+		//we determine plane normal by computing the smallest eigen value of M = 1/n * S[(p-µ)*(p-µ)']
+		SquareMatrixd covMat = computeCovarianceMatrix();
+		CCVector3d e(0, 0, 0);
+
+		SquareMatrixd eigVectors;
+		std::vector<double> eigValues;
+		if (!Jacobi<double>::ComputeEigenValuesAndVectors(covMat, eigVectors, eigValues, true))
+		{
+			//failure
+			return NAN_VALUE;
+		}
+
+		//compute curvature as the rate of change of the surface
+		e.x = eigValues[0];
+		e.y = eigValues[1];
+		e.z = eigValues[2];
+
+		const double sum = e.x + e.y + e.z; //we work with absolute values
+		if (LessThanEpsilon(sum))
+		{
+			return NAN_VALUE;
+		}
+
+		const double eMin = std::min(std::min(e.x, e.y), e.z);
+		return static_cast<ScalarType>(eMin / sum);
+	}
+		break;
+
+	default:
+	{
+		assert(false);
+	}
 		break;
 	}
 

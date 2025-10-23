@@ -283,7 +283,8 @@ namespace CCCoreLib
 											(point coordinates should already be expressed relative to the gravity center)
 			\return nullptr if computation failed
 		**/
-		const PointCoordinateType* getQuadric(SquareMatrix* localOrientation = nullptr);
+		const PointCoordinateType* getQuadric(SquareMatrix* localOrientation = nullptr,
+											  const CCVector3* normal = nullptr);
 
 		//! Computes the best interpolating quadric (Least-square)
 		/** \param[out] quadricEquation an array of 10 coefficients [a,b,c,d,e,f,g,l,m,n] such as
@@ -336,7 +337,7 @@ namespace CCCoreLib
 		//! Computes the least-square best fitting plane
 		bool computeLeastSquareBestFittingPlane();
 		//! Computes best fitting 2.5D quadric
-		bool computeQuadric();
+		bool computeQuadric(const CCVector3 *normal = nullptr);
 
 		//! Associated cloud
 		GenericIndexedCloudPersist* m_associatedCloud;
