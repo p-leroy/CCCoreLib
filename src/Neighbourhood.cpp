@@ -15,6 +15,9 @@
 //System
 #include <algorithm>
 
+#include <QScopedPointer>
+#include <memory>
+
 using namespace CCCoreLib;
 
 Neighbourhood::Neighbourhood(GenericIndexedCloudPersist* associatedCloud)
@@ -917,7 +920,8 @@ ScalarType Neighbourhood::computeCurvature(const CCVector3& P,
 		}
 		else if (signCurvature == SIGN_WITH_PLUS_Z)
 		{
-			H = getQuadric(nullptr, new CCVector3(0, 0, 1));
+			std::unique_ptr<CCVector3> N(new CCVector3(0, 0, 1));
+			H = getQuadric(nullptr, N.get());
 		}
 		else
 		{
@@ -938,63 +942,22 @@ ScalarType Neighbourhood::computeCurvature(const CCVector3& P,
 
 		if (cType == TYPE_OF_QUADRIC) // If we just want the type of quadric, we have what we need
 		{
-			// Check if quadratic terms are significant
-			// Compare magnitude of quadratic terms to linear terms
-			double linear_magnitude = pow(pow(b, 2) + pow(c, 2), 0.5);
-			double quadratic_magnitude = pow(pow(d, 2) + pow(e, 2) + pow(f, 2), 0.5);
-			const bool isNearlyPlanar = quadratic_magnitude < linear_magnitude;
 			// Form the Hessian matrix (second derivatives)
 			// For z = d*x² + e*x*y + f*y², the Hessian is:
 			// H = [[2d,  e ],
 			//      [ e, 2f]]
-			SquareMatrixd eigVectors;
-			std::vector<double> eigValues;
-			SquareMatrixd D(2);
-			D.m_values[0][0] = 2 * d;
-			D.m_values[0][1] = e;
-			D.m_values[1][0] = 2 * f;
-			D.m_values[1][1] = e;
-			double tolerance = 1e-8;
-			if (isNearlyPlanar)
+			double deltaH = 4 * d * f - e * e; // 4df - e^2
+			if (deltaH > 0)
 			{
-				return PLANE;
+				return ELLIPTIC_PARABOLOID_BOWL;
 			}
-			if (!Jacobi<double>::ComputeEigenValuesAndVectors(D, eigVectors, eigValues, false))
+			else if (deltaH < 0)
 			{
-				return UNKNOWN;
+				return HYPERBOLIC_PARABOLOID_SADDLE;
 			}
 			else
 			{
-				double lambda1 = eigValues[0];
-				double lambda2 = eigValues[1];
-				// Classification based on eigenvalues
-				if (abs(lambda1) < tolerance && abs(lambda2) < tolerance)
-				{
-					return PLANE;
-				}
-				else if (abs(lambda1) < tolerance || abs(lambda2) < tolerance)
-				{
-					return PARABOLIC_CYLINDER;
-				}
-				else if (lambda1 > tolerance && lambda2 > tolerance)
-				{
-					// Both positive -> elliptic paraboloid (bowl shape)
-					return ELLIPTIC_PARABOLOID_CONVEX;
-				}
-				else if (lambda1 < -tolerance && lambda2 < -tolerance)
-				{
-					// Both negative -> elliptic paraboloid (dome shape)
-					return ELLIPTIC_PARABOLOID_CONCAVE;
-				}
-				else if ((lambda1 > tolerance && lambda2 < -tolerance) || (lambda1 < -tolerance && lambda2 > tolerance))
-				{
-					// Opposite signs -> hyperbolic paraboloid (saddle)
-					return HYPERBOLIC_PARABOLOID;
-				}
-				else
-				{
-					return DEGENERATE;
-				}
+				return PARABOLIC_DEGENERATE;
 			}
 		}
 

@@ -45,13 +45,10 @@ namespace CCCoreLib
 								SIGN_WITH_PLUS_Z};
 
 		//! Type of quadric
-		enum TypeOfQuadric {	UNKNOWN,
-								PLANE,
-								PARABOLIC_CYLINDER,
-								ELLIPTIC_PARABOLOID_CONVEX,
-								ELLIPTIC_PARABOLOID_CONCAVE,
-								HYPERBOLIC_PARABOLOID,
-								DEGENERATE};
+		enum TypeOfQuadric {	ELLIPTIC_PARABOLOID_BOWL,
+								HYPERBOLIC_PARABOLOID_SADDLE,
+								PARABOLIC_DEGENERATE
+						   };
 
 		//! Default constructor
 		/** \param associatedCloud reference cloud
