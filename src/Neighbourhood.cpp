@@ -379,7 +379,7 @@ bool Neighbourhood::computeQuadric(const CCVector3* normal)
 
 	double lmax2 = 0; //max (squared) dimension
 
-	//for every points
+	//for every point
 	{
 		double* _A = A.data();
 		double* _b = b.data();
