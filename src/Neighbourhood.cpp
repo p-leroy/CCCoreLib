@@ -860,6 +860,19 @@ double Neighbourhood::computeFeature(GeomFeature feature)
 		case EigenValue3:
 			value = l3;
 			break;
+		case DegreeOfPlanarity:
+			if (std::abs(l3) > std::numeric_limits<double>::epsilon())
+				value = std::log(l1 / l3);
+			break;
+		case DegreeOfLinearity:
+			if (std::abs(l3) > std::numeric_limits<double>::epsilon())
+			{
+				double d = std::log(l2 / l3);
+				// consider also for perfectly spherical neighborhoods (L2=L3), where we have division-by-zero
+				if (std::abs(d) > std::numeric_limits<double>::epsilon())
+					value = std::log(l1 / l2) / d;
+			}
+			break;
 		default:
 			assert(false);
 			break;

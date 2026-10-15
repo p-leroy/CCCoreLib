@@ -191,7 +191,9 @@ namespace CCCoreLib
 			Verticality,
 			EigenValue1,
 			EigenValue2,
-			EigenValue3
+			EigenValue3,
+			DegreeOfPlanarity,
+			DegreeOfLinearity
 		};
 
 		//! Computes the given feature on a set of point

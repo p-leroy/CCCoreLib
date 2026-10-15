@@ -14,7 +14,6 @@ namespace CCCoreLib
 	class GenericIndexedMesh;
 	class GenericIndexedCloud;
 	class KDTree;
-	class ScalarField;
 
 	//! Common point cloud registration algorithms
 	class CC_CORE_LIB_API RegistrationTools : public CCToolbox
@@ -161,6 +160,8 @@ namespace CCCoreLib
 				, minRMSDecrease(1.0e-5)
 				, nbMaxIterations(20)
 				, adjustScale(false)
+				, minScale(std::numeric_limits<double>::quiet_NaN())
+				, maxScale(std::numeric_limits<double>::quiet_NaN())
 				, filterOutFarthestPoints(false)
 				, samplingLimit(50000)
 				, finalOverlapRatio(1.0)
@@ -185,6 +186,12 @@ namespace CCCoreLib
 			//! Whether to release the scale parameter during the registration procedure or not
 			bool adjustScale;
 
+			//! Min scale (if adjustScale is true - NaN if no minimum boundary)
+			double minScale;
+
+			//! Max scale (if adjustScale is true - NaN if no maximum boundary)
+			double maxScale;
+
 			//! If true, the algorithm will automatically ignore farthest points from the reference, for better convergence
 			bool filterOutFarthestPoints;
 
@@ -195,10 +202,10 @@ namespace CCCoreLib
 			double finalOverlapRatio;
 
 			//! Weights for model points (i.e. only if the model entity is a cloud) (optional)
-			ScalarField* modelWeights;
+			ScalarField::Shared modelWeights;
 
 			//! Weights for data points (optional)
-			ScalarField* dataWeights;
+			ScalarField::Shared dataWeights;
 
 			//! Filters to be applied on the resulting transformation at each step (experimental) - see RegistrationTools::TRANSFORMATION_FILTERS flags
 			int transformationFilters;
